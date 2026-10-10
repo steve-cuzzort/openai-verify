@@ -1,0 +1,36 @@
+{
+  "manifest_version": 2,
+  "name": "Verify Image with OpenAI",
+  "version": "0.1.0",
+  "description": "Right-click an image or audio player to open OpenAI's verify page with the file preloaded. You review and confirm the upload yourself.",
+  "icons": {
+    "48": "icon.svg",
+    "96": "icon.svg"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "openai-verify-image@example.local",
+      "strict_min_version": "109.0"
+    }
+  },
+  "permissions": [
+    "contextMenus",
+    "notifications",
+    "<all_urls>"
+  ],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://openai.com/research/verify",
+        "https://openai.com/research/verify/*",
+        "https://openai.com/verify",
+        "https://openai.com/verify/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
