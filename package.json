@@ -1,0 +1,25 @@
+{
+  "name": "openai-verify-firefox",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Firefox add-on: right-click an image or audio to open OpenAI's verify page with the file preloaded.",
+  "scripts": {
+    "start": "web-ext run",
+    "lint": "web-ext lint",
+    "package": "web-ext lint && web-ext build --overwrite-dest"
+  },
+  "webExt": {
+    "sourceDir": ".",
+    "artifactsDir": "web-ext-artifacts",
+    "ignoreFiles": [
+      ".idea",
+      "package.json",
+      "package-lock.json",
+      "web-ext-artifacts",
+      "README.md"
+    ]
+  },
+  "devDependencies": {
+    "web-ext": "^10.7.0"
+  }
+}

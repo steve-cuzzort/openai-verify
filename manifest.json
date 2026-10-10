@@ -1,6 +1,6 @@
 {
   "manifest_version": 2,
-  "name": "Verify Image with OpenAI",
+  "name": "Verify with OpenAI",
   "version": "0.1.0",
   "description": "Right-click an image or audio player to open OpenAI's verify page with the file preloaded. You review and confirm the upload yourself.",
   "icons": {
@@ -10,7 +10,10 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "openai-verify-image@example.local",
-      "strict_min_version": "109.0"
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
     }
   },
   "permissions": [
