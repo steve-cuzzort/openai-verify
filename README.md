@@ -1,6 +1,6 @@
 # Verify Image with OpenAI (Firefox)
 
-Right-click an image or an audio player, choose **Verify with OpenAI**, and a new
+Right-click an image, an audio player, or a link to an audio file, choose **Verify with OpenAI**, and a new
 tab opens `openai.com/research/verify` with the file already placed in the upload box.
 You review the page and confirm the upload yourself.
 
@@ -29,6 +29,9 @@ add-on must be signed through addons.mozilla.org (self-distribution is fine).
   the page checks for.
 - Audio works when the page uses a native `<audio>` element. Custom players
   that hide it won't show the menu item.
+- Links to audio files (URLs ending in `.mp3`, `.wav`, `.flac`, etc.) get a
+  **Verify linked audio with OpenAI** item. If the link turns out to be a web
+  page rather than the file itself, you get the unsupported-format message.
 
 ## Limits worth knowing
 

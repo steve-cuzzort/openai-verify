@@ -2,6 +2,7 @@
 
 const VERIFY_URL = "https://openai.com/research/verify";
 const MENU_ID = "verify-openai";
+const LINK_MENU_ID = "verify-openai-link";
 // Formats the verify page accepts (from its file input's accept list),
 // mapped to the file extension to use.
 const SUPPORTED_TYPES = new Map([
@@ -52,6 +53,18 @@ browser.contextMenus.create({
   contexts: ["image", "audio"],
 });
 
+// Links to audio files, e.g. a download link to an .mp3. Only shown when the
+// link's URL ends in an audio extension, optionally followed by a query string.
+const AUDIO_LINK_EXTENSIONS = ["mp3", "wav", "aac", "flac", "ogg", "oga", "opus", "pcm"];
+browser.contextMenus.create({
+  id: LINK_MENU_ID,
+  title: "Verify linked audio with OpenAI",
+  contexts: ["link"],
+  targetUrlPatterns: AUDIO_LINK_EXTENSIONS.flatMap((ext) =>
+    [ext, ext.toUpperCase()].flatMap((e) => ["*://*/*." + e, "*://*/*." + e + "?*"])
+  ),
+});
+
 function notify(message) {
   browser.notifications.create({
     type: "basic",
@@ -91,11 +104,14 @@ async function loadFile(srcUrl) {
 }
 
 browser.contextMenus.onClicked.addListener(async (info) => {
-  if (info.menuItemId !== MENU_ID || !info.srcUrl) return;
+  let url = null;
+  if (info.menuItemId === MENU_ID) url = info.srcUrl;
+  else if (info.menuItemId === LINK_MENU_ID) url = info.linkUrl;
+  if (!url) return;
 
   let file = null;
   try {
-    file = await loadFile(info.srcUrl);
+    file = await loadFile(url);
   } catch (err) {
     notify(
       "Couldn't fetch that file automatically (" +
