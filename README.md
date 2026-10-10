@@ -41,3 +41,7 @@ add-on must be signed through addons.mozilla.org (self-distribution is fine).
 - If OpenAI changes the verify page's markup, `content.js` may need an update.
   If the upload box isn't found, you'll see a banner and can upload manually.
 - Uploading is subject to OpenAI's Terms of Use and Privacy Policy, as the page states.
+
+## License
+
+This project is licensed under the [Mozilla Public License 2.0](LICENSE).

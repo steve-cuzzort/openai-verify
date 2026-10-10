@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Firefox add-on: right-click an image or audio to open OpenAI's verify page with the file preloaded.",
+  "license": "MPL-2.0",
   "scripts": {
     "start": "web-ext run",
     "lint": "web-ext lint",
