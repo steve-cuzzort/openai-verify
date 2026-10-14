@@ -1,6 +1,6 @@
 {
   "name": "synthid-verify",
-  "version": "0.3.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Firefox and Chrome extension: right-click an image, audio or video to open the SynthID Detector with the file preloaded.",
   "license": "MPL-2.0",

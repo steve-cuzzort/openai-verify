@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Verify with SynthID",
   "version": "0.3.0",
-  "description": "Right-click an image, audio or video player to open Google's SynthID Detector with the file preloaded. You review and confirm the upload yourself.",
+  "description": "Right-click an image, audio or video player to open Google's SynthID Detector with the file preloaded.",
   "icons": {
     "128": "icon.png"
   },
