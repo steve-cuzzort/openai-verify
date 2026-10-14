@@ -1,4 +1,4 @@
-# Verify with SynthID (Firefox)
+# Verify with SynthID (Firefox and Chrome)
 
 Right-click an image, an audio or video player, or a link to a media file,
 choose **Verify with SynthID**, and a new tab opens Google DeepMind's
@@ -9,7 +9,9 @@ The detector checks for SynthID watermarks from Google, OpenAI, NVIDIA and
 Kakao. It requires signing in with a Google, Apple or OpenAI account and allows
 roughly 10 checks a day.
 
-## Install (temporary, for testing)
+## Install (for testing)
+
+### Firefox (140 or later)
 
 1. Open `about:debugging#/runtime/this-firefox` in Firefox.
 2. Click **Load Temporary Add-on...**.
@@ -18,10 +20,38 @@ roughly 10 checks a day.
 Temporary add-ons are removed when Firefox closes. For permanent installs the
 add-on must be signed through addons.mozilla.org (self-distribution is fine).
 
+### Chrome (and other Chromium browsers)
+
+1. Open `chrome://extensions`.
+2. Turn on **Developer mode**.
+3. Click **Load unpacked** and select this folder.
+
+Chrome shows a warning that it doesn't recognise `browser_specific_settings`
+and `background.scripts`. Those keys are for Firefox and are safe to ignore.
+An unpacked extension stays installed until you remove it. Publishing on the
+Chrome Web Store needs a developer account (one-time fee) and review.
+
+### Packaging
+
+`npm run package` builds one zip in `web-ext-artifacts/` that works for both
+addons.mozilla.org and the Chrome Web Store.
+
+## Browser differences
+
+The code is shared. It's a Manifest V3 extension, and the manifest lists both
+`background.service_worker` (used by Chrome) and `background.scripts` (used by
+Firefox). Both browsers unload the background script when idle, so the file
+waiting to be uploaded is kept in the extension's IndexedDB rather than in
+memory. The file goes to the page as base64, because Chrome sends messages as
+JSON. For the same reason files over 45 MB aren't preloaded, and you upload
+them yourself.
+
 ## How it works
 
 - `background.js` adds the context-menu items, downloads the file you clicked,
   opens the SynthID Detector, and holds the file until that tab has taken it.
+  Files waiting for a tab are cleared when the tab closes or the browser
+  restarts.
 - `content.js` runs only on `synthid.com`. It waits for the page's upload box
   to appear (the page is rendered by Angular in the browser, so the input is
   ready as soon as it exists), assigns the file to it once, and fires `input`

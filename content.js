@@ -4,6 +4,8 @@
 // user right-clicked, then places it in the page's upload box. The user still
 // reviews the page and confirms the upload themselves.
 
+globalThis.browser ??= chrome;
+
 const FILE_INPUT_SELECTOR = 'input[type="file"]';
 const WAIT_MS = 15000;
 
@@ -33,6 +35,14 @@ function waitForFileInput() {
   });
 }
 
+// The background script sends the file as base64; see its onMessage listener.
+function fromBase64(data) {
+  const binary = atob(data);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
 function setInputFile(input, file) {
   const transfer = new DataTransfer();
   transfer.items.add(file);
@@ -55,8 +65,12 @@ function showBanner(text) {
 
 (async () => {
   const pending = await browser.runtime.sendMessage({ type: "get-pending-file" });
-  log("pending file from background:", pending ? pending.name + " (" + pending.type + ", " + pending.buffer.byteLength + " bytes)" : "none");
-  if (!pending) return;
+  if (!pending) {
+    log("pending file from background: none");
+    return;
+  }
+  const bytes = fromBase64(pending.data);
+  log("pending file from background:", pending.name + " (" + pending.type + ", " + bytes.byteLength + " bytes)");
 
   // The page is rendered in the browser by Angular, which attaches the input's
   // listeners as it creates the element, so once the input exists it's ready.
@@ -68,7 +82,7 @@ function showBanner(text) {
     return;
   }
 
-  const file = new File([pending.buffer], pending.name, { type: pending.type });
+  const file = new File([bytes], pending.name, { type: pending.type });
   // Hand the file over exactly once, the way the native file picker does.
   // Don't also simulate a drop: the page could process the file twice.
   setInputFile(input, file);

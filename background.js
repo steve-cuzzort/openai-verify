@@ -1,5 +1,9 @@
 "use strict";
 
+// Chrome only provides the chrome.* namespace; Firefox provides both. In
+// Manifest V3 the chrome.* calls used here return promises, like browser.*.
+globalThis.browser ??= chrome;
+
 const VERIFY_URL = "https://synthid.com/";
 const MENU_ID = "verify-synthid";
 const LINK_MENU_ID = "verify-synthid-link";
@@ -67,31 +71,79 @@ const EXTENSION_TYPES = new Map([
   ["webm", "video/webm"],
 ]);
 
-// tabId -> { name, type, buffer } waiting for the verify page to load.
-const pending = new Map();
+// Messages to the content script are JSON-serialized in Chrome and capped at
+// 64 MiB, and the file travels as base64 (4/3 the size), so stay under that.
+const MAX_FILE_BYTES = 45 * 1024 * 1024;
 
-browser.contextMenus.create({
-  id: MENU_ID,
-  title: TITLE,
-  contexts: ["image", "audio", "video"],
-});
+// tabId -> { name, type, buffer } waiting for the verify page to load. Kept in
+// IndexedDB rather than in memory because the background script is unloaded
+// when idle (a service worker in Chrome, an event page in Firefox), which
+// would lose the file during a detour through a sign-in page.
+const pending = (() => {
+  const STORE = "files";
+
+  function open() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open("pending-files", 1);
+      request.onupgradeneeded = () => request.result.createObjectStore(STORE);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async function run(mode, action) {
+    const db = await open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, mode);
+      const request = action(tx.objectStore(STORE));
+      tx.oncomplete = () => {
+        db.close();
+        resolve(request.result);
+      };
+      tx.onerror = tx.onabort = () => {
+        db.close();
+        reject(tx.error);
+      };
+    });
+  }
+
+  return {
+    get: (tabId) => run("readonly", (store) => store.get(tabId)),
+    set: (tabId, file) => run("readwrite", (store) => store.put(file, tabId)),
+    delete: (tabId) => run("readwrite", (store) => store.delete(tabId)),
+    clear: () => run("readwrite", (store) => store.clear()),
+  };
+})();
 
 // Links to media files, e.g. a download link to an .mp3. Only shown when the
 // link's URL ends in a supported extension, optionally followed by a query string.
 const LINK_EXTENSIONS = ["mp3", "wav", "aac", "flac", "ogg", "oga", "m4a", "mp4", "mov", "webm"];
-browser.contextMenus.create({
-  id: LINK_MENU_ID,
-  title: "Verify linked audio/video with SynthID",
-  contexts: ["link"],
-  targetUrlPatterns: LINK_EXTENSIONS.flatMap((ext) =>
-    [ext, ext.toUpperCase()].flatMap((e) => ["*://*/*." + e, "*://*/*." + e + "?*"])
-  ),
+
+// Menus persist across restarts of the background script, so create them once.
+// Creating them on every wake-up would fail with duplicate-ID errors.
+browser.runtime.onInstalled.addListener(() => {
+  browser.contextMenus.create({
+    id: MENU_ID,
+    title: TITLE,
+    contexts: ["image", "audio", "video"],
+  });
+  browser.contextMenus.create({
+    id: LINK_MENU_ID,
+    title: "Verify linked audio/video with SynthID",
+    contexts: ["link"],
+    targetUrlPatterns: LINK_EXTENSIONS.flatMap((ext) =>
+      [ext, ext.toUpperCase()].flatMap((e) => ["*://*/*." + e, "*://*/*." + e + "?*"])
+    ),
+  });
 });
+
+// Tab IDs don't carry over between browser sessions, so leftovers are useless.
+browser.runtime.onStartup.addListener(() => pending.clear());
 
 function notify(message) {
   browser.notifications.create({
     type: "basic",
-    iconUrl: browser.runtime.getURL("icon.svg"),
+    iconUrl: browser.runtime.getURL("icon.png"),
     title: TITLE,
     message,
   });
@@ -118,6 +170,9 @@ async function loadFile(srcUrl) {
     throw new Error("Could not download the file (HTTP " + response.status + ").");
   }
   const blob = await response.blob();
+  if (blob.size > MAX_FILE_BYTES) {
+    throw new Error("the file is larger than " + MAX_FILE_BYTES / 1024 / 1024 + " MB");
+  }
   const type = resolveType(blob.type, response.url || srcUrl);
   return {
     name: "file-to-verify." + (SUPPORTED_TYPES.get(type) || "bin"),
@@ -155,16 +210,39 @@ browser.contextMenus.onClicked.addListener(async (info) => {
   }
 
   const tab = await browser.tabs.create({ url: VERIFY_URL });
-  if (file) pending.set(tab.id, file);
+  if (file) await pending.set(tab.id, file);
 });
+
+function toBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  const chunks = [];
+  // fromCharCode takes its bytes as arguments, so go in chunks to stay under
+  // the engine's argument limit.
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    chunks.push(String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)));
+  }
+  return btoa(chunks.join(""));
+}
 
 // The content script on the verify page asks for the file once the upload box
 // is ready, and says when it has handed it over. Until then the file stays put,
 // so it survives a detour through a sign-in page in the same tab.
-browser.runtime.onMessage.addListener((message, sender) => {
+// Replies go through sendResponse (returning true keeps the channel open) since
+// that works in both browsers. The file is sent as base64 because Chrome
+// serializes messages as JSON, which turns an ArrayBuffer into {}.
+browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || !sender.tab) return;
   if (message.type === "get-pending-file") {
-    return Promise.resolve(pending.get(sender.tab.id) || null);
+    pending
+      .get(sender.tab.id)
+      .then((file) =>
+        sendResponse(file ? { name: file.name, type: file.type, data: toBase64(file.buffer) } : null)
+      )
+      .catch((err) => {
+        console.error("[Verify Image] couldn't read the pending file:", err);
+        sendResponse(null);
+      });
+    return true;
   }
   if (message.type === "pending-file-used") {
     pending.delete(sender.tab.id);

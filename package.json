@@ -1,11 +1,12 @@
 {
-  "name": "synthid-verify-firefox",
-  "version": "0.2.0",
+  "name": "synthid-verify",
+  "version": "0.3.0",
   "private": true,
-  "description": "Firefox add-on: right-click an image, audio or video to open the SynthID Detector with the file preloaded.",
+  "description": "Firefox and Chrome extension: right-click an image, audio or video to open the SynthID Detector with the file preloaded.",
   "license": "MPL-2.0",
   "scripts": {
     "start": "web-ext run",
+    "start:chrome": "web-ext run --target chromium",
     "lint": "web-ext lint",
     "package": "web-ext lint && web-ext build --overwrite-dest"
   },
@@ -17,7 +18,8 @@
       "package.json",
       "package-lock.json",
       "web-ext-artifacts",
-      "README.md"
+      "README.md",
+      "icon.svg"
     ]
   },
   "devDependencies": {
