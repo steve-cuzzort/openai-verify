@@ -1,25 +1,37 @@
 "use strict";
 
-const VERIFY_URL = "https://openai.com/research/verify";
-const MENU_ID = "verify-openai";
-const LINK_MENU_ID = "verify-openai-link";
-// Formats the verify page accepts (from its file input's accept list),
-// mapped to the file extension to use.
+const VERIFY_URL = "https://synthid.com/";
+const MENU_ID = "verify-synthid";
+const LINK_MENU_ID = "verify-synthid-link";
+const TITLE = "Verify with SynthID";
+// Formats the page accepts (from its file input's accept list), mapped to the
+// file extension to use.
 const SUPPORTED_TYPES = new Map([
   ["image/png", "png"],
   ["image/jpeg", "jpg"],
   ["image/webp", "webp"],
+  ["image/bmp", "bmp"],
+  ["image/avif", "avif"],
+  ["image/heic", "heic"],
+  ["image/heif", "heif"],
+  ["image/tiff", "tiff"],
+  ["image/gif", "gif"],
   ["audio/mpeg", "mp3"],
   ["audio/wav", "wav"],
   ["audio/aac", "aac"],
   ["audio/flac", "flac"],
   ["audio/ogg", "ogg"],
-  ["audio/opus", "opus"],
-  ["audio/pcm", "pcm"],
+  ["audio/mp4", "m4a"],
+  ["audio/webm", "webm"],
+  ["video/mp4", "mp4"],
+  ["video/quicktime", "mov"],
+  ["video/webm", "webm"],
 ]);
 // Other names servers use for the same formats.
 const TYPE_ALIASES = new Map([
   ["image/jpg", "image/jpeg"],
+  ["image/x-ms-bmp", "image/bmp"],
+  ["image/x-bmp", "image/bmp"],
   ["audio/mp3", "audio/mpeg"],
   ["audio/x-mp3", "audio/mpeg"],
   ["audio/x-wav", "audio/wav"],
@@ -27,6 +39,8 @@ const TYPE_ALIASES = new Map([
   ["audio/vnd.wave", "audio/wav"],
   ["audio/x-aac", "audio/aac"],
   ["audio/x-flac", "audio/flac"],
+  ["audio/x-m4a", "audio/mp4"],
+  ["audio/m4a", "audio/mp4"],
 ]);
 // For servers that send no useful type, guess from the URL's file extension.
 const EXTENSION_TYPES = new Map([
@@ -34,14 +48,23 @@ const EXTENSION_TYPES = new Map([
   ["jpg", "image/jpeg"],
   ["jpeg", "image/jpeg"],
   ["webp", "image/webp"],
+  ["bmp", "image/bmp"],
+  ["avif", "image/avif"],
+  ["heic", "image/heic"],
+  ["heif", "image/heif"],
+  ["tiff", "image/tiff"],
+  ["tif", "image/tiff"],
+  ["gif", "image/gif"],
   ["mp3", "audio/mpeg"],
   ["wav", "audio/wav"],
   ["aac", "audio/aac"],
   ["flac", "audio/flac"],
   ["ogg", "audio/ogg"],
   ["oga", "audio/ogg"],
-  ["opus", "audio/opus"],
-  ["pcm", "audio/pcm"],
+  ["m4a", "audio/mp4"],
+  ["mp4", "video/mp4"],
+  ["mov", "video/quicktime"],
+  ["webm", "video/webm"],
 ]);
 
 // tabId -> { name, type, buffer } waiting for the verify page to load.
@@ -49,18 +72,18 @@ const pending = new Map();
 
 browser.contextMenus.create({
   id: MENU_ID,
-  title: "Verify with OpenAI",
-  contexts: ["image", "audio"],
+  title: TITLE,
+  contexts: ["image", "audio", "video"],
 });
 
-// Links to audio files, e.g. a download link to an .mp3. Only shown when the
-// link's URL ends in an audio extension, optionally followed by a query string.
-const AUDIO_LINK_EXTENSIONS = ["mp3", "wav", "aac", "flac", "ogg", "oga", "opus", "pcm"];
+// Links to media files, e.g. a download link to an .mp3. Only shown when the
+// link's URL ends in a supported extension, optionally followed by a query string.
+const LINK_EXTENSIONS = ["mp3", "wav", "aac", "flac", "ogg", "oga", "m4a", "mp4", "mov", "webm"];
 browser.contextMenus.create({
   id: LINK_MENU_ID,
-  title: "Verify linked audio with OpenAI",
+  title: "Verify linked audio/video with SynthID",
   contexts: ["link"],
-  targetUrlPatterns: AUDIO_LINK_EXTENSIONS.flatMap((ext) =>
+  targetUrlPatterns: LINK_EXTENSIONS.flatMap((ext) =>
     [ext, ext.toUpperCase()].flatMap((e) => ["*://*/*." + e, "*://*/*." + e + "?*"])
   ),
 });
@@ -69,7 +92,7 @@ function notify(message) {
   browser.notifications.create({
     type: "basic",
     iconUrl: browser.runtime.getURL("icon.svg"),
-    title: "Verify with OpenAI",
+    title: TITLE,
     message,
   });
 }
@@ -120,13 +143,13 @@ browser.contextMenus.onClicked.addListener(async (info) => {
     );
   }
 
-  // Converting would strip the C2PA metadata the page checks for, so don't.
+  // Converting would strip the metadata and watermarks the page checks for, so don't.
   if (file && !SUPPORTED_TYPES.has(file.type)) {
     notify(
       "This file's format (" +
         (file.type || "unknown") +
-        ") isn't supported. The verify page accepts PNG, JPEG and WebP images, " +
-        "and MP3, WAV, AAC, FLAC, OGG, Opus and PCM audio."
+        ") isn't supported. SynthID accepts JPEG, PNG, WebP, BMP, AVIF, HEIC, TIFF and GIF " +
+        "images, MP3, WAV, AAC, FLAC, OGG and M4A audio, and MP4, MOV and WebM video."
     );
     return;
   }
@@ -135,12 +158,17 @@ browser.contextMenus.onClicked.addListener(async (info) => {
   if (file) pending.set(tab.id, file);
 });
 
-// The content script on the verify page asks for the file once it has loaded.
+// The content script on the verify page asks for the file once the upload box
+// is ready, and says when it has handed it over. Until then the file stays put,
+// so it survives a detour through a sign-in page in the same tab.
 browser.runtime.onMessage.addListener((message, sender) => {
-  if (!message || message.type !== "get-pending-image" || !sender.tab) return;
-  const file = pending.get(sender.tab.id);
-  pending.delete(sender.tab.id);
-  return Promise.resolve(file || null);
+  if (!message || !sender.tab) return;
+  if (message.type === "get-pending-file") {
+    return Promise.resolve(pending.get(sender.tab.id) || null);
+  }
+  if (message.type === "pending-file-used") {
+    pending.delete(sender.tab.id);
+  }
 });
 
 browser.tabs.onRemoved.addListener((tabId) => pending.delete(tabId));

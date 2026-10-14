@@ -1,15 +1,15 @@
 {
   "manifest_version": 2,
-  "name": "Verify with OpenAI",
-  "version": "0.1.0",
-  "description": "Right-click an image or audio player to open OpenAI's verify page with the file preloaded. You review and confirm the upload yourself.",
+  "name": "Verify with SynthID",
+  "version": "0.2.0",
+  "description": "Right-click an image, audio or video player to open Google's SynthID Detector with the file preloaded. You review and confirm the upload yourself.",
   "icons": {
     "48": "icon.svg",
     "96": "icon.svg"
   },
   "browser_specific_settings": {
     "gecko": {
-      "id": "openai-verify-image@example.local",
+      "id": "synthid-verify@example.local",
       "strict_min_version": "140.0",
       "data_collection_permissions": {
         "required": ["none"]
@@ -27,10 +27,7 @@
   "content_scripts": [
     {
       "matches": [
-        "https://openai.com/research/verify",
-        "https://openai.com/research/verify/*",
-        "https://openai.com/verify",
-        "https://openai.com/verify/*"
+        "https://synthid.com/*"
       ],
       "js": ["content.js"],
       "run_at": "document_idle"
